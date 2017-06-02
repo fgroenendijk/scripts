@@ -22,26 +22,40 @@ def main( argv = None ):
 		diskname = arg
 
 	try:
+		# Fix GPT disk, place GPT index at end of disk
+		pipes = subprocess.Popen( ["gdisk", diskname], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE )
+		stdout, stderr = pipes.communicate( "x\ne\nw\nY\n" )
+		print stdout
+
 	        partition = subprocess.check_output(["parted", "-s", diskname, "print"], stderr=subprocess.STDOUT)
 
 		startOfPartition = None
+		diskSize = None
 		for line in partition.split( '\n' ):
 			if re.match( '^ 1', line ):
 				row = re.split( ' +', line.strip() )
 				if len( row ) > 1:
 					startOfPartition = row[1]
 					print startOfPartition
+                        elif re.match( '^Disk ' + diskname + ':', line ):
+				row = re.split( ': +', line.strip() )
+				if len( row ) > 1:
+					diskSize = row[1]
+					print "Disk size is: " + diskSize
 
-		if startOfPartition != None:
-			partition = subprocess.check_output(["parted", "-s", diskname, "rm", "1"], stderr=subprocess.STDOUT)
-			print partition
-			partition = subprocess.check_output(["parted", "-s", diskname, "mkpart", "primary", "ext2", startOfPartition, "-1"], stderr=subprocess.STDOUT)
+		if startOfPartition != None and diskSize != None:
+			# Remove first partition
+			pipes = subprocess.Popen( ["gdisk", diskname], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE )
+			stdout, stderr = pipes.communicate( "d\nw\nY\n" )
+			print stdout
+			# Create partition based on disk size
+			partition = subprocess.check_output(["parted", "-s", diskname, "mkpart", "primary", "ext2", startOfPartition, diskSize], stderr=subprocess.STDOUT)
 			print partition
 			partition = subprocess.check_output(["parted", "-s", diskname, "print"], stderr=subprocess.STDOUT)
 			print partition
 
 	except subprocess.CalledProcessError as e:
-	        print e.output
+	        print "ERROR Caught: " + e.output
 
 if __name__ == "__main__":
 	main(sys.argv[1:])
